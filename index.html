@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>計算ドリルパーフェクトマスター（PWA）</title>
+<title>計算ドリルパーフェクトマスター（PWA v61）</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#ff87b7">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
@@ -24,6 +24,8 @@
   .btn.ghost{background:#fff;border:2px solid var(--accent);color:var(--accent)}
   .grid{display:grid;gap:6px}
   .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .calHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .calHeader .month{font-weight:800}
   .day{background:#fff;border:2px solid #f3f4f6;border-radius:10px;padding:8px;text-align:center;cursor:pointer}
   .day.sel{outline:3px solid #ffd1e5}
   .day.good{background:#ecfeff;border-color:#bae6fd}
@@ -44,6 +46,11 @@
   .topTabs button.active{background:#ffe4f1;border-color:#ffd1e5}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:#111827;color:#fff;padding:10px 14px;border-radius:999px;font-size:14px;opacity:0;transition:.3s;pointer-events:none}
   .toast.show{opacity:1}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px}
+  .modal .box{background:#fff;border-radius:14px;max-width:520px;width:100%;padding:16px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+  .modal .box h3{margin:0 0 8px}
+  .modal.show{display:flex}
 </style>
 </head>
 <body>
@@ -98,8 +105,13 @@
   <!-- Calendar Page -->
   <section id="page-calendar" class="hidden">
     <div class="card">
-      <div class="title">がんばりカレンダー</div>
+      <div class="calHeader">
+        <button class="btn ghost" onclick="shiftMonth(-1)">← 前の月</button>
+        <div class="month" id="monthLabel"></div>
+        <button class="btn ghost" onclick="shiftMonth(1)">次の月 →</button>
+      </div>
       <div id="calendar" class="calendar"></div>
+      <div class="small" style="margin-top:6px">※ 記録のある日をタップすると詳細を表示します</div>
     </div>
   </section>
 
@@ -107,7 +119,7 @@
   <section id="page-stamp" class="hidden">
     <div class="card">
       <div class="title">スタンプ表（第1回〜第60回）</div>
-      <div class="small">スタンプ：<span id="cur">🌟</span></div>
+      <div class="small">スタンプ：<span id="cur">🌟</span>（空マスはタップで貼る／貼ってあるマスはタップで消す確認）</div>
       <div id="palette" class="palette"></div>
       <div style="height:8px"></div>
       <div id="board60" class="board60"></div>
@@ -121,6 +133,17 @@
 
 <div class="toast" id="toast">OK!</div>
 
+<!-- modal -->
+<div class="modal" id="modal">
+  <div class="box">
+    <h3 id="mTitle">記録</h3>
+    <div id="mBody"></div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn ghost" onclick="closeModal()">とじる</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // SW
   if ('serviceWorker' in navigator) {
@@ -132,25 +155,30 @@
   const STAMPS = ['🌟','💮','👏','💪','🌈','🧠','🐻','🐰','🐱','🍀','🍎','🎵','⚡','🔥','🥇'];
   const LABELS60 = Array.from({length:60}, (_,i)=>`第${i+1}回`);
 
-  let state = JSON.parse(localStorage.getItem('pm_v60_state') || '{}');
+  let state = JSON.parse(localStorage.getItem('pm_v61_state') || '{}');
   if (!state.records) state.records = {}; // yyyy-mm-dd -> {pages, minutes, note, sticker}
   if (!state.board60) state.board60 = Array(60).fill('');
   if (!state.current) state.current = '🌟';
   if (!state.selectedDate) state.selectedDate = fmt(new Date());
+  if (!state.viewMonth) state.viewMonth = state.selectedDate.slice(0,7); // yyyy-mm
 
   // Helpers
   const toast = document.getElementById('toast');
   const calendarEl = document.getElementById('calendar');
+  const monthLabel = document.getElementById('monthLabel');
   const stickersEl = document.getElementById('stickers');
   const boardEl = document.getElementById('board60');
   const paletteEl = document.getElementById('palette');
   const curEl = document.getElementById('cur');
   const datePick = document.getElementById('datePick');
+  const modal = document.getElementById('modal');
+  const mTitle = document.getElementById('mTitle');
+  const mBody = document.getElementById('mBody');
 
-  function save(){ localStorage.setItem('pm_v60_state', JSON.stringify(state)); }
+  function save(){ localStorage.setItem('pm_v61_state', JSON.stringify(state)); }
   function fmt(d){ const y=d.getFullYear(); const m=('0'+(d.getMonth()+1)).slice(-2); const day=('0'+d.getDate()).slice(-2); return `${y}-${m}-${day}`; }
   function showToast(m){ toast.textContent=m; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),1200); }
-  function setToday(){ state.selectedDate = fmt(new Date()); datePick.value = state.selectedDate; save(); renderCalendar(); showToast('今日にしたよ'); }
+  function setToday(){ const t = fmt(new Date()); state.selectedDate = t; datePick.value = t; state.viewMonth = t.slice(0,7); save(); renderCalendar(); showToast('今日にしたよ'); }
   window.setToday = setToday;
 
   // Tabs
@@ -177,14 +205,24 @@
     });
   }
 
-  // Calendar (click to select date)
+  // Calendar with month nav and details
+  function ymToDateStr(ym){ const [y,m]=ym.split('-'); return `${y}-${m}-01`; }
+  function shiftMonth(delta){
+    const [y,m] = state.viewMonth.split('-').map(n=>parseInt(n));
+    const d = new Date(y, m-1 + delta, 1);
+    const ym = `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}`;
+    state.viewMonth = ym;
+    save();
+    renderCalendar();
+  }
   function renderCalendar(){
+    const ym = state.viewMonth;
+    monthLabel.textContent = ym.replace('-', '年') + '月';
     calendarEl.innerHTML = '';
-    const sel = state.selectedDate;
-    const s = sel.split('-'); const y = parseInt(s[0]), m = parseInt(s[1]) - 1;
-    const first = new Date(y,m,1);
+    const [y,m] = ym.split('-').map(n=>parseInt(n));
+    const first = new Date(y,m-1,1);
     const startDay = first.getDay();
-    const days = new Date(y, m+1, 0).getDate();
+    const days = new Date(y, m, 0).getDate();
 
     ['日','月','火','水','木','金','土'].forEach(w=>{
       const wd = document.createElement('div'); wd.textContent = w; wd.className='small'; calendarEl.appendChild(wd);
@@ -193,15 +231,32 @@
     for(let i=0;i<startDay;i++){ const b=document.createElement('div'); b.className='day'; b.style.visibility='hidden'; calendarEl.appendChild(b); }
     for(let d=1; d<=days; d++){
       const box = document.createElement('div'); box.className='day';
-      const key = `${y}-${('0'+(m+1)).slice(-2)}-${('0'+d).slice(-2)}`;
+      const key = `${y}-${('0'+m).slice(-2)}-${('0'+d).slice(-2)}`;
       const rec = state.records[key];
       if (rec) { if (rec.sticker==='すごくできた！') box.classList.add('great'); else box.classList.add('good'); }
       if (key===state.selectedDate) box.classList.add('sel');
       box.innerHTML = `<div>${d}</div><div class="small">${rec? (rec.minutes||''):''}</div>`;
-      box.onclick = ()=>{ state.selectedDate = key; save(); datePick.value = key; renderCalendar(); showToast(`${key} をえらんだよ`); };
+      box.onclick = ()=>{
+        state.selectedDate = key; save(); datePick.value = key; renderCalendar();
+        if (rec){ openModal(key, rec); }
+        else { showToast(`${key} をえらんだよ`); }
+      };
       calendarEl.appendChild(box);
     }
   }
+
+  function openModal(date, rec){
+    mTitle.textContent = `${date} の記録`;
+    mBody.innerHTML = `
+      <div class="small">ページ：${rec.pages||'-'}</div>
+      <div class="small">時間：${rec.minutes||'-'}</div>
+      <div class="small">シール：${rec.sticker||'-'}</div>
+      <div class="small">メモ：</div>
+      <div style="white-space:pre-wrap;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-top:4px">${(rec.note||'').replace(/[<>&]/g, s=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]))}</div>`;
+    modal.classList.add('show');
+  }
+  function closeModal(){ modal.classList.remove('show'); }
+  window.closeModal = closeModal;
 
   // Record save
   function saveRecord(){
@@ -212,7 +267,7 @@
     const sticker = selSticker ? selSticker.querySelector('.small').textContent : '';
     const key = datePick.value || state.selectedDate || fmt(new Date());
     if (!key){ showToast('日付をえらんでね'); return; }
-    if (!pages && !minutes && !sticker){ showToast('入力してね！'); return; }
+    if (!pages && !minutes && !sticker && !note){ showToast('入力してね！'); return; }
     state.records[key] = {pages, minutes, note, sticker};
     save();
     showToast(`${key} にきろくしたよ！`);
@@ -224,7 +279,7 @@
   }
   window.saveRecord = saveRecord;
 
-  // Stamp board 60
+  // Stamp board 60 with tap-to-erase
   function renderPalette(){
     paletteEl.innerHTML='';
     STAMPS.forEach(s=>{
@@ -238,17 +293,27 @@
     for(let i=0;i<60;i++){
       const c=document.createElement('div'); c.className='cell60';
       const val = state.board60[i] || '';
-      c.innerHTML = `<div class="val">${val}</div><div class="lbl">${LABELS60[i]}</div>`;
+      c.innerHTML = `<div class="val">${val}</div><div class="lbl">第${i+1}回</div>`;
       if (val) c.classList.add('filled');
-      c.onclick = ()=> place60(i);
-      c.ondblclick = ()=> erase60(i);
+      c.onclick = ()=> toggleStamp(i);
       boardEl.appendChild(c);
     }
   }
-  function place60(i){ state.board60[i]=state.current; save(); const el=boardEl.children[i]; el.querySelector('.val').textContent=state.current; el.classList.add('filled'); }
-  function erase60(i){ state.board60[i]=''; save(); const el=boardEl.children[i]; el.querySelector('.val').textContent=''; el.classList.remove('filled'); }
+  function toggleStamp(i){
+    const has = !!state.board60[i];
+    if (!has){
+      state.board60[i]=state.current;
+      save();
+      const el=boardEl.children[i]; el.querySelector('.val').textContent=state.current; el.classList.add('filled');
+    } else {
+      if(confirm('このスタンプを消しますか？')){
+        state.board60[i]=''; save();
+        const el=boardEl.children[i]; el.querySelector('.val').textContent=''; el.classList.remove('filled');
+      }
+    }
+  }
   function clearBoard(){ if(!confirm('ぜんぶ けしますか？')) return; state.board60 = Array(60).fill(''); save(); renderBoard60(); }
-  function exportJSON(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pm_v60_data.json'; a.click(); }
+  function exportJSON(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pm_v61_data.json'; a.click(); }
   window.clearBoard = clearBoard; window.exportJSON = exportJSON;
 
   // Init
