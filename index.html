@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>がんばり☆きろく帳（PWA 完全版）</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#ff87b7">
+<!-- Allow inline script for this single-file build -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+<style>
+  :root { --accent:#ff87b7; --accent2:#8ad7ff; --text:#333 }
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;background:linear-gradient(180deg,#fff5fb,#f5fbff)}
+  header{position:sticky;top:0;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:12px 16px;font-weight:700;text-align:center}
+  .wrap{max-width:520px;margin:0 auto;padding:12px 12px 80px}
+  .card{background:#fff;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 6px 16px rgba(0,0,0,.07)}
+  .title{font-size:20px;font-weight:800;margin-bottom:6px}
+  .small{font-size:12px;color:#6b7280}
+  .row{display:flex;gap:10px}
+  .col{flex:1}
+  input,select,textarea{width:100%;padding:12px;border-radius:12px;border:2px solid #e5e7eb;font-size:16px}
+  .btn{border:none;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer;width:100%}
+  .btn.main{background:var(--accent);color:#fff}
+  .btn.sub{background:var(--accent2);color:#fff}
+  .btn.ghost{background:#fff;border:2px solid var(--accent);color:var(--accent)}
+  .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .day{background:#fff;border:2px solid #f3f4f6;border-radius:10px;padding:8px;text-align:center}
+  .day.good{background:#ecfeff;border-color:#bae6fd}
+  .day.great{background:#fff1f5;border-color:#fbcfe8}
+  .sticker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .sticker{border:2px solid #e5e7eb;border-radius:12px;padding:8px;text-align:center;cursor:pointer}
+  .sticker.sel{border-color:var(--accent);box-shadow:0 0 0 3px #ffd1e5}
+  .nav{position:fixed;left:0;right:0;bottom:0;height:56px;background:#ffffffdd;backdrop-filter:blur(6px);display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e5e7eb}
+  .nav button{border:none;background:transparent;font-size:12px;padding:6px 0;color:#6b7280;cursor:pointer}
+  .nav button.active{color:var(--accent);font-weight:700}
+  .hidden{display:none}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:#111827;color:#fff;padding:10px 14px;border-radius:999px;font-size:14px;opacity:0;transition:.3s;pointer-events:none}
+  .toast.show{opacity:1}
+  /* Stamp board */
+  .palette{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .stamp{border:2px solid #e5e7eb;border-radius:10px;padding:8px;text-align:center;cursor:pointer;background:#fff;font-size:22px;user-select:none}
+  .stamp.sel{border-color:var(--accent);box-shadow:0 0 0 3px #ffd1e5}
+  .board{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .cell{background:#fff;border:2px solid #e5e7eb;border-radius:10px;height:56px;display:flex;align-items:center;justify-content:center;font-size:26px;user-select:none;cursor:pointer}
+  .cell.filled{border-color:#c7d2fe;background:#eef2ff}
+  .topTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px}
+  .topTabs button{border:none;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px 0;cursor:pointer}
+  .topTabs button.active{background:#ffe4f1;border-color:#ffd1e5}
+</style>
+</head>
+<body>
+<header>がんばり☆きろく帳（PWA 完全版）</header>
+
+<div class="wrap">
+  <div class="topTabs">
+    <button id="tab-record" class="active" onclick="showPage('record')">記録</button>
+    <button id="tab-calendar" onclick="showPage('calendar')">カレンダー</button>
+    <button id="tab-stamp" onclick="showPage('stamp')">スタンプ表</button>
+  </div>
+
+  <!-- Record Page -->
+  <section id="page-record">
+    <div class="card">
+      <div class="title">きょうのドリル</div>
+      <div class="row">
+        <div class="col">
+          <div class="small">やったページ</div>
+          <input id="pages" type="text" placeholder="例：p.12〜15">
+        </div>
+        <div class="col">
+          <div class="small">かかった時間</div>
+          <select id="minutes">
+            <option value="">えらんでね</option>
+            <option>5分</option><option>10分</option><option>15分</option><option>20分</option>
+            <option>25分</option><option>30分</option><option>45分</option><option>60分</option>
+          </select>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px">ひとことメモ</div>
+      <textarea id="note" rows="3" placeholder="例：ひきざんがすこしむずかしかった…"></textarea>
+      <div style="height:10px"></div>
+      <button class="btn main" onclick="saveToday()">きろくする</button>
+    </div>
+
+    <div class="card">
+      <div class="title">ふりかえりシール</div>
+      <div id="stickers" class="sticker-grid"></div>
+    </div>
+  </section>
+
+  <!-- Calendar Page -->
+  <section id="page-calendar" class="hidden">
+    <div class="card">
+      <div class="title">がんばりカレンダー</div>
+      <div id="calendar" class="calendar"></div>
+    </div>
+  </section>
+
+  <!-- Stamp Page -->
+  <section id="page-stamp" class="hidden">
+    <div class="card">
+      <div class="title">スタンプ表（6×5=30マス）</div>
+      <div class="small">えらぶスタンプ：<span id="cur">🌟</span></div>
+      <div id="palette" class="palette"></div>
+      <div style="height:8px"></div>
+      <div id="board" class="board"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sub" onclick="clearBoard()">ぜんぶけす</button>
+        <button class="btn ghost" onclick="exportJSON()">JSON書き出し</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast">OK!</div>
+
+<script>
+  // PWA register with relative path
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js');
+    });
+  }
+
+  // State
+  const STICKER_LIST = ['💪 がんばった！','🌈 すごくできた！','🔥 あと少し！','⚡ はやくできた！'];
+  const STAMPS = ['🌟','💮','👏','💪','🌈','🧠','🐻','🐰','🐱','🍀','🍎','🎵','⚡','🔥','🥇'];
+  let state = JSON.parse(localStorage.getItem('ganbari_pwa_state_fullfix') || '{}');
+  if (!state.records) state.records = {};
+  if (!state.board) state.board = Array(30).fill('');
+  if (!state.current) state.current = '🌟';
+
+  // Helpers
+  const toast = document.getElementById('toast');
+  const stickersEl = document.getElementById('stickers');
+  const calendarEl = document.getElementById('calendar');
+  const paletteEl = document.getElementById('palette');
+  const boardEl = document.getElementById('board');
+  const curEl = document.getElementById('cur');
+
+  function saveState(){ localStorage.setItem('ganbari_pwa_state_fullfix', JSON.stringify(state)); }
+  function fmt(d){ const y=d.getFullYear(); const m=('0'+(d.getMonth()+1)).slice(-2); const day=('0'+d.getDate()).slice(-2); return `${y}-${m}-${day}`; }
+  function showToast(m){ toast.textContent=m; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1200); }
+
+  // Pages
+  function showPage(which){
+    document.getElementById('page-record').classList.add('hidden');
+    document.getElementById('page-calendar').classList.add('hidden');
+    document.getElementById('page-stamp').classList.add('hidden');
+    document.getElementById('tab-record').classList.remove('active');
+    document.getElementById('tab-calendar').classList.remove('active');
+    document.getElementById('tab-stamp').classList.remove('active');
+    if (which==='record'){ document.getElementById('page-record').classList.remove('hidden'); document.getElementById('tab-record').classList.add('active'); }
+    if (which==='calendar'){ document.getElementById('page-calendar').classList.remove('hidden'); document.getElementById('tab-calendar').classList.add('active'); renderCalendar(); }
+    if (which==='stamp'){ document.getElementById('page-stamp').classList.remove('hidden'); document.getElementById('tab-stamp').classList.add('active'); renderPalette(); renderBoard(); }
+  }
+
+  // Stickers
+  function renderStickers(){
+    stickersEl.innerHTML='';
+    STICKER_LIST.forEach(s=>{
+      const [emoji,label]=s.split(' ');
+      const d=document.createElement('div'); d.className='sticker'; d.innerHTML=`<div style="font-size:20px">${emoji}</div><div class="small">${label}</div>`;
+      d.onclick=()=>{
+        document.querySelectorAll('.sticker').forEach(x=>x.classList.remove('sel'));
+        d.classList.add('sel'); d.dataset.value = label;
+      };
+      stickersEl.appendChild(d);
+    });
+  }
+
+  // Calendar
+  function renderCalendar(){
+    calendarEl.innerHTML = '';
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const first = new Date(y,m,1);
+    const startDay = first.getDay();
+    const days = new Date(y, m+1, 0).getDate();
+    ['日','月','火','水','木','金','土'].forEach(w=>{
+      const wd = document.createElement('div'); wd.textContent = w; wd.className='small'; calendarEl.appendChild(wd);
+    });
+    for(let i=0;i<startDay;i++){ const b=document.createElement('div'); b.className='day'; b.style.visibility='hidden'; calendarEl.appendChild(b); }
+    for(let d=1; d<=days; d++){
+      const box = document.createElement('div'); box.className='day';
+      const key = `${y}-${('0'+(m+1)).slice(-2)}-${('0'+d).slice(-2)}`;
+      const rec = state.records[key];
+      if (rec) { if (rec.sticker==='すごくできた！') box.classList.add('great'); else box.classList.add('good'); }
+      box.innerHTML = `<div>${d}</div><div class="small">${rec? (rec.minutes||''):''}</div>`;
+      calendarEl.appendChild(box);
+    }
+  }
+
+  // Record
+  function saveToday(){
+    const pages = document.getElementById('pages').value.trim();
+    const minutes = document.getElementById('minutes').value;
+    const note = document.getElementById('note').value.trim();
+    const sel = document.querySelector('.sticker.sel');
+    const sticker = sel ? sel.querySelector('.small').textContent : '';
+    if (!pages && !minutes && !sticker){
+      showToast('入力してね！');
+      return;
+    }
+    state.records[fmt(new Date())] = {pages, minutes, note, sticker};
+    saveState();
+    showToast('きろくしたよ！');
+    document.getElementById('pages').value='';
+    document.getElementById('minutes').value='';
+    document.getElementById('note').value='';
+    document.querySelectorAll('.sticker').forEach(x=>x.classList.remove('sel'));
+    renderCalendar();
+  }
+  window.saveToday = saveToday;
+
+  // Stamp board
+  function renderPalette(){
+    paletteEl.innerHTML='';
+    STAMPS.forEach(s=>{
+      const d=document.createElement('div'); d.className='stamp'+(state.current===s?' sel':''); d.textContent=s;
+      d.onclick=()=>{ state.current=s; curEl.textContent=s; saveState(); renderPalette(); };
+      paletteEl.appendChild(d);
+    });
+  }
+  function renderBoard(){
+    boardEl.innerHTML='';
+    const cols=6, rows=5;
+    for(let i=0;i<rows*cols;i++){
+      const c=document.createElement('div'); c.className='cell';
+      const v=state.board[i]||''; if(v){c.classList.add('filled'); c.textContent=v;}
+      c.onclick=()=>place(i); c.ondblclick=()=>erase(i);
+      boardEl.appendChild(c);
+    }
+  }
+  function place(i){ state.board[i]=state.current; saveState(); const el=boardEl.children[i]; el.textContent=state.current; el.classList.add('filled'); }
+  function erase(i){ state.board[i]=''; saveState(); const el=boardEl.children[i]; el.textContent=''; el.classList.remove('filled'); }
+  function clearBoard(){ if(!confirm('ぜんぶ けしますか？')) return; state.board = state.board.map(()=>'' ); saveState(); renderBoard(); }
+  function exportJSON(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ganbari_data.json'; a.click(); }
+  window.clearBoard = clearBoard; window.exportJSON = exportJSON;
+
+  // Init
+  renderStickers();
+  renderCalendar();
+  showPage('record');
+</script>
+</body>
+</html>
